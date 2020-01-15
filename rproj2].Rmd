@@ -1,0 +1,176 @@
+---
+title: "Project 2 Economic Costs, Injuries and Fatalities from Weather Events in the US"
+author: "Elaine Ellerton"
+date: "1/9/2020"
+output: html_document
+---
+## Introduction
+
+Storms and weather events can cause immense fatalities, injuries and economic loss from property and crop damages. We are looking at data obtained from the U.S. National Oceanic and Atmospheric Administration's (NOAA) storm database. I am looking for which weather event creates the most injuries and fatalaties as well as which events have the highest economic costs. 
+Loading libraries.  
+The link to the data can be found here: [(NOAA) storm database](https://d396qusza40orc.cloudfront.net/repdata%2Fdata%2FStormData.csv.bz2).
+
+There is more information at the [National Weather Services](https://d396qusza40orc.cloudfront.net/repdata%2Fpeer2_doc%2Fpd01016005curr.pdf)
+
+## Synopsis
+
+After analysing the data, the weather event, tornado, is the clear winner for the most fatalities and injuries in the US. Drought has the highest economic  when it comes to crop damage and flood has the highest economic cost for property damage. Combined, hurricane/typhoon have the greatest economic cost for both property and crop damages. 
+
+```{r loading_libraries, results="hide", message=FALSE, warning=FALSE}
+library(plyr)
+library(dplyr)
+library(ggplot2)
+library(gridExtra)
+library(ggpubr)
+
+
+```
+
+### Downloading and reading data
+
+
+
+```{r data,  cache=TRUE}
+download.file("https://d396qusza40orc.cloudfront.net/repdata%2Fdata%2FStormData.csv.bz2", 
+              dest="DataStorm.bz2", 
+              method="curl")
+data <- read.csv(bzfile("DataStorm.bz2"), 
+                 header=TRUE,
+                 sep=",",
+                 stringsAsFactors=FALSE)
+```
+
+### Data Processing
+
+**Changing all EVTYPES to upper case so duplpicates will be combined.**
+```{r}
+data$EVTYPE <- toupper(data$EVTYPE)
+
+```
+
+**Selecting only the categories EVTYPE, FATALITES, INJURIES, PROPDMG, CROPDMG, PROPDMGEXP, CROPDMGEXP to create a smaller dataset and then grouping by EVTYPE.**
+
+```{r}
+newDF <-data %>% select(FATALITIES, EVTYPE, INJURIES, PROPDMG, CROPDMG, PROPDMGEXP, CROPDMGEXP) %>% group_by(EVTYPE)
+
+```
+## Fatalites and Injuries from Weather/Storm events
+**Finding top ten weather/storm patterns that cause the most fatalities.**
+```{r}
+healthFat <- aggregate(FATALITIES ~EVTYPE, data= newDF, FUN=sum)
+healthFat <- arrange(healthFat, desc(FATALITIES))
+TophealthFat <- healthFat[1:10, ]
+```
+
+**Finding top ten weather/storm patterns that cause the most injuries.**
+```{r}
+healthInj<- aggregate(INJURIES ~ EVTYPE, data= newDF, FUN=sum)
+healthInj <- arrange(healthInj, desc(INJURIES))
+TophealthInj <-healthInj[1:10,]
+
+```
+
+## Economic Loss from Property and Crop Damages after Weather/Storm Event.  
+
+**The data provides two types of economic impact, property damage (PROPDMG) and crop damage (CROPDMG). The damage is in USD and is coded in the PROPDMGEXP and CROPDMGEXP parameters. The index in the PROPDMGEXP and CROPDMGEXP are the following:**
+
+H, h -> hundreds = x100
+K, K -> kilos = x1,000
+M, m -> millions = x1,000,000
+B,b -> billions = x1,000,000,000
+(+) -> x1
+(-) -> x0
+(?) -> x0
+blank -> x0
+
+**Change unique variables associated with CROPDMGEXP and PROPDMGEXP to upper case to remove duplicates.**
+```{r}
+newDF$PROPDMGEXP <- toupper(newDF$PROPDMGEXP)
+newDF$CROPDMGEXP <- toupper(newDF$CROPDMGEXP)
+```
+**Map multiplicative values to PROPDMGEXP and CROPDMGEXP variables in order to get USD.**
+```{r}
+newDF$PROPDMGEXP <- mapvalues(newDF$PROPDMGEXP, from = c("K", "M", "",  "B", "+", "0", "5", "6", "?" ,"4" ,"2" ,"3","H" ,"7", "-", "1" ,"8"),
+                              to=c(10^3,10^6, 10^0,  10^9, 10^0, 10^0, 10^5, 10^6, 10^0, 10^4, 10^2, 10^3, 10^2, 10^7, 10^0, 10^1, 10^8))
+newDF$PROPDMGEXP <- as.numeric(as.character(newDF$PROPDMGEXP))  
+
+newDF$CROPDMGEXP <- mapvalues(newDF$CROPDMGEXP, from = c("", "?", "0", "K","M", "B"), to=c(10^0,10^0, 10^0,10^3, 10^6,10^9))
+newDF$CROPDMGEXP <- as.numeric(as.character(newDF$CROPDMGEXP))
+```
+**Create new column with product of PROPDMG and PROPDMGEXP, aggregate the total economic cost from property loss by storm type n USD. Then select top ten causes of property damage.**
+```{r}
+newDF$PropLossTotal <- (newDF$PROPDMG * newDF$PROPDMGEXP)
+                              
+sumPropLoss <-aggregate(PropLossTotal ~ EVTYPE, data=newDF, FUN=sum)
+sumPropLoss <- arrange(sumPropLoss, desc(PropLossTotal))
+TopPropLoss <- sumPropLoss[1:10,]
+```
+
+**Create new column with product of CROPDMG and CROPDMGEXP, aggregate the total economic loss from crop destruction by storm type in USD Then select top ten causes of crop damage.**
+```{r}
+newDF$CropDMGTotal <- (newDF$CROPDMG * newDF$CROPDMGEXP)
+
+sumCropLoss <- aggregate(CropDMGTotal ~ EVTYPE, data=newDF, FUN=sum)
+sumCropLoss <- arrange(sumCropLoss, desc(CropDMGTotal))
+TopCropLoss <- sumCropLoss[1:10,]
+```
+
+**Here are the top ten  storm events that create the biggest economic losses of both property and crop loss.**
+```{r}
+newDF$TotalEconDMG <-newDF$CROPDMGEXP + newDF$PROPDMGEXP
+CropPropTotal <- aggregate(TotalEconDMG~EVTYPE, data=newDF, FUN=sum)
+CropPropTotal <- arrange(CropPropTotal, desc(TotalEconDMG))
+TopCropPropTotal <- CropPropTotal[1:10,]
+```
+## Results
+
+### Weather Event Related Fatalities and Injuries in the US
+**Plotting top ten fatalities and injuries caused by weather/storm events. Tornadoes cause, by far, the greatest amount of fatalities and Injuries.**
+```{r TopTenFatalityPlot, results='hide' }
+g <- ggplot(TophealthFat, aes(x=reorder(EVTYPE, -FATALITIES) , y= FATALITIES, fill=EVTYPE))
+Fatplot <- g + geom_col() +theme(axis.text.x=element_text(angle=90), 
+                                 legend.position = "none",axis.title.x = element_blank() ) + labs(y="Amount of Fatalities",
+                                 title="Total Fatalities Casued by Weather")  
+ 
+```
+
+```{r TopTenInuryPlot,results="hide"}
+g2 <- ggplot(TophealthInj, aes(x=reorder(EVTYPE, -INJURIES), y=INJURIES, fill=EVTYPE))
+Injplot <- g2+ geom_col() + theme(axis.text.x=element_text(angle=90), legend.position = "none",
+                                  axis.title.x = element_blank() ) + labs(y="Amount of Injuries", 
+                                  title="Total Injuries Casued by Weather")    
+ 
+```
+
+```{r}
+ggarrange(Fatplot, Injplot)
+```
+
+## Crop and Property Damage Economic Costs in the US from Weather Related Events
+
+
+```{r  results = "hide"}
+g4 <- ggplot(TopPropLoss, aes(x=reorder(EVTYPE, -PropLossTotal), y=PropLossTotal, fill=EVTYPE))
+PropPlot <-g4 + geom_col() +theme(axis.text.x=element_text(angle=90), legend.position = "none",axis.title.x = element_blank() ) + labs(y="Property Cost (USD)", title="Total Economic Cost of Propery Damage by Weather Event in the US")           
+ 
+g3 <- ggplot(TopCropLoss, aes(x=reorder(EVTYPE, -CropDMGTotal), y= CropDMGTotal, fill= EVTYPE))
+CropPlot <- g3 + geom_col() + theme(axis.text.x=element_text(angle=90), legend.position = "none",axis.title.x = element_blank() ) + labs(y="Crop Loss Costs (USD", title="Total Economic Cost of Crop Damage by Weather Event in the US")   
+ 
+
+```
+**Plot containing the top ten weather events with the highest economic costs from property damage, the top ten weather events with the highest economic costs from crop damage. **
+```{r}
+grid.arrange(PropPlot, CropPlot)
+```
+
+Flood has the highest econommic costs for property damage in the US with Hurricanes/typhoons coming in second a cost of three times less.
+For the greatest econommic costs from crop damage, drought is the clear winner, with flood coming in second. 
+Together, hurricane/typhoon creates the greatest economic loss with tornado coming in second.
+
+**Final plot shows that when combing property and crop damage costs, hurricane/typhoons are now the biggest cause, with tornados coming in second.**
+```{r}
+g5 <- ggplot(TopCropPropTotal, aes(x=reorder(EVTYPE, -TotalEconDMG), y=TotalEconDMG, fill= EVTYPE))
+g5 + geom_col() + theme(axis.text.x=element_text(angle=90), legend.position = "none",axis.title.x = element_blank()) + labs(y="Property and Crop Costs (USD)", title="Total Economic Cost of Propery & Crop Damage by Weather Event in the US")       
+```
+
+
